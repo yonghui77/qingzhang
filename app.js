@@ -32,8 +32,12 @@ const state = {
   query: "",
   editingId: null,
   entryType: "expense",
-  selectedCategory: "dining"
+  selectedCategory: "dining",
+  ocrResult: null,
+  ocrJob: 0
 };
+
+let ocrWorkerPromise = null;
 
 const els = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map(element => [element.id, element])
@@ -233,19 +237,158 @@ function escapeHTML(value) {
   return node.innerHTML;
 }
 
-function openEntry(id = null) {
+function openAddMethod() {
+  if (typeof els.addMethodDialog.showModal === "function") {
+    els.addMethodDialog.showModal();
+  } else {
+    openEntry();
+  }
+}
+
+function setOCRProgress(progress, label, hint) {
+  const value = Math.max(0, Math.min(1, Number(progress) || 0));
+  els.ocrProgress.style.width = `${Math.round(value * 100)}%`;
+  els.ocrPercent.textContent = `${Math.round(value * 100)}%`;
+  if (label) els.ocrStatusText.textContent = label;
+  if (hint) els.ocrStatusHint.textContent = hint;
+}
+
+function translateOCRStatus(message) {
+  const labels = {
+    "loading tesseract core": "加载识别引擎…",
+    "loaded tesseract core": "识别引擎已加载",
+    "initializing tesseract": "初始化识别引擎…",
+    "initialized tesseract": "识别引擎已就绪",
+    "loading language traineddata": "下载中文识别模型…",
+    "loaded language traineddata": "中文模型已加载",
+    "initializing api": "准备文字识别…",
+    "initialized api": "开始识别文字",
+    "recognizing text": "正在识别截图…"
+  };
+  return labels[message.status] || "正在处理截图…";
+}
+
+function getOCRWorker() {
+  if (!window.Tesseract?.createWorker) {
+    throw new Error("识别组件加载失败，请检查网络后重试");
+  }
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = window.Tesseract.createWorker(["chi_sim", "eng"], 1, {
+      logger(message) {
+        const progress = message.status === "recognizing text"
+          ? 0.5 + (Number(message.progress) || 0) * 0.48
+          : Math.min(0.48, (Number(message.progress) || 0) * 0.48);
+        setOCRProgress(progress, translateOCRStatus(message));
+      },
+      errorHandler(error) {
+        console.error("OCR worker error", error);
+      }
+    }).catch(error => {
+      ocrWorkerPromise = null;
+      throw error;
+    });
+  }
+  return ocrWorkerPromise;
+}
+
+async function startScreenshotOCR(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    showToast("请选择图片文件");
+    return;
+  }
+  if (file.size > 25 * 1024 * 1024) {
+    showToast("图片过大，请选择小于 25MB 的截图");
+    return;
+  }
+
+  const job = ++state.ocrJob;
+  state.ocrResult = null;
+  const previewURL = URL.createObjectURL(file);
+  els.ocrPreview.src = previewURL;
+  setOCRProgress(0.02, "准备图片…", "截图只在当前设备中处理，不会保存到云端。");
+  els.ocrDialog.showModal();
+
+  try {
+    const canvas = await AutoLedgerOCR.preprocessImage(file);
+    if (job !== state.ocrJob) return;
+    setOCRProgress(0.08, "图片已优化…");
+    const worker = await getOCRWorker();
+    if (job !== state.ocrJob) return;
+    const result = await worker.recognize(canvas);
+    if (job !== state.ocrJob) return;
+
+    setOCRProgress(1, "识别完成");
+    const parsed = AutoLedgerOCR.parseReceipt(result.data.text);
+    state.ocrResult = parsed;
+    setTimeout(() => {
+      if (els.ocrDialog.open) els.ocrDialog.close();
+      openEntry(null, parsed);
+    }, 250);
+  } catch (error) {
+    console.error(error);
+    if (els.ocrDialog.open) els.ocrDialog.close();
+    alert(`截图识别失败：${error.message || "请检查网络后重试"}\n\n你仍可以使用手动记账。`);
+  } finally {
+    URL.revokeObjectURL(previewURL);
+    els.screenshotInput.value = "";
+  }
+}
+
+function renderOCRReview() {
+  const result = state.ocrResult;
+  els.ocrReview.hidden = !result;
+  if (!result) return;
+
+  const summaryParts = [];
+  if (result.merchant) summaryParts.push(result.merchant);
+  summaryParts.push(result.type === "income" ? "识别为收入" : "识别为支出");
+  els.ocrSummary.textContent = summaryParts.join(" · ");
+  els.ocrRawText.textContent = result.rawText || "未识别到文字";
+
+  els.ocrAmountSection.hidden = !result.amounts.length;
+  els.ocrAmountCandidates.innerHTML = result.amounts.map(candidate => `
+    <button type="button" class="amount-candidate ${Number(els.amountInput.value) === candidate.amount ? "selected" : ""}"
+      data-ocr-amount="${candidate.amount}">
+      ${money(candidate.amount)}
+    </button>`).join("");
+
+  const duplicate = result.amount
+    ? findDuplicate(result.amount, result.date, result.merchant)
+    : null;
+  const warnings = [...result.warnings];
+  if (duplicate) warnings.unshift("发现同一天、同金额的记录，可能是重复账目。");
+  els.ocrWarning.hidden = warnings.length === 0;
+  els.ocrWarning.textContent = warnings.join(" ");
+}
+
+function findDuplicate(amount, date, note, ignoreId = null) {
+  const normalizedNote = String(note || "").trim().toLocaleLowerCase();
+  return state.entries.find(entry => {
+    if (entry.id === ignoreId || entry.date !== date) return false;
+    if (Math.round(Number(entry.amount) * 100) !== Math.round(Number(amount) * 100)) return false;
+    const existingNote = String(entry.note || "").trim().toLocaleLowerCase();
+    return !normalizedNote || !existingNote
+      || existingNote.includes(normalizedNote)
+      || normalizedNote.includes(existingNote);
+  });
+}
+
+function openEntry(id = null, suggestion = null) {
   const entry = id ? state.entries.find(item => item.id === id) : null;
+  state.ocrResult = suggestion || null;
   state.editingId = entry?.id || null;
-  state.entryType = entry?.type || "expense";
-  state.selectedCategory = entry?.category || categories[state.entryType][0][0];
+  state.entryType = entry?.type || suggestion?.type || "expense";
+  state.selectedCategory = entry?.category || suggestion?.category || categories[state.entryType][0][0];
   els.entryDialogTitle.textContent = entry ? "编辑记录" : "记一笔";
-  els.amountInput.value = entry?.amount || "";
-  els.dateInput.value = entry?.date || dateKey(new Date());
-  els.noteInput.value = entry?.note || "";
+  els.amountInput.value = entry?.amount || suggestion?.amount || "";
+  els.dateInput.value = entry?.date || suggestion?.date || dateKey(new Date());
+  els.noteInput.value = entry?.note || suggestion?.merchant || "";
   els.deleteEntryButton.classList.toggle("visible", Boolean(entry));
   renderEntryType();
+  renderOCRReview();
   els.entryDialog.showModal();
-  setTimeout(() => els.amountInput.focus(), 120);
+  if (!suggestion) setTimeout(() => els.amountInput.focus(), 120);
 }
 
 function renderEntryType() {
@@ -265,6 +408,16 @@ function saveEntry(event) {
   if (!amount || amount <= 0) return showToast("请输入正确金额");
 
   const existing = state.entries.find(entry => entry.id === state.editingId);
+  const duplicate = findDuplicate(
+    amount,
+    els.dateInput.value,
+    els.noteInput.value,
+    existing?.id || null
+  );
+  if (!existing && duplicate && !confirm("发现同一天、同金额的相似记录，可能重复。仍然保存吗？")) {
+    return;
+  }
+
   const entry = {
     id: existing?.id || crypto.randomUUID(),
     type: state.entryType,
@@ -278,6 +431,7 @@ function saveEntry(event) {
   if (existing) Object.assign(existing, entry);
   else state.entries.push(entry);
   saveEntries();
+  state.ocrResult = null;
   els.entryDialog.close();
   render();
   showToast(existing ? "记录已更新" : "已记一笔");
@@ -287,6 +441,7 @@ function deleteEditingEntry() {
   if (!state.editingId || !confirm("确定删除这条记录吗？")) return;
   state.entries = state.entries.filter(entry => entry.id !== state.editingId);
   saveEntries();
+  state.ocrResult = null;
   els.entryDialog.close();
   render();
   showToast("记录已删除");
@@ -346,7 +501,24 @@ document.querySelectorAll("[data-tab]").forEach(button => {
   });
 });
 
-els.headerAddButton.addEventListener("click", () => openEntry());
+els.headerAddButton.addEventListener("click", openAddMethod);
+els.cancelMethodButton.addEventListener("click", () => els.addMethodDialog.close());
+els.manualChoiceButton.addEventListener("click", () => {
+  els.addMethodDialog.close();
+  openEntry();
+});
+els.screenshotChoiceButton.addEventListener("click", () => els.screenshotInput.click());
+els.screenshotInput.addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  els.addMethodDialog.close();
+  startScreenshotOCR(file);
+});
+els.cancelOCRButton.addEventListener("click", () => {
+  state.ocrJob += 1;
+  if (els.ocrDialog.open) els.ocrDialog.close();
+  els.screenshotInput.value = "";
+});
 els.previousMonth.addEventListener("click", () => {
   state.selectedMonth = new Date(state.selectedMonth.getFullYear(), state.selectedMonth.getMonth() - 1, 1);
   renderHome();
@@ -381,6 +553,13 @@ document.addEventListener("click", event => {
     state.selectedCategory = category.dataset.category;
     renderEntryType();
   }
+  const amountCandidate = event.target.closest("[data-ocr-amount]");
+  if (amountCandidate) {
+    els.amountInput.value = amountCandidate.dataset.ocrAmount;
+    document.querySelectorAll("[data-ocr-amount]").forEach(button => {
+      button.classList.toggle("selected", button === amountCandidate);
+    });
+  }
 });
 
 document.querySelectorAll("[data-entry-type]").forEach(button => {
@@ -392,7 +571,10 @@ document.querySelectorAll("[data-entry-type]").forEach(button => {
 });
 
 els.entryForm.addEventListener("submit", saveEntry);
-els.cancelEntryButton.addEventListener("click", () => els.entryDialog.close());
+els.cancelEntryButton.addEventListener("click", () => {
+  state.ocrResult = null;
+  els.entryDialog.close();
+});
 els.deleteEntryButton.addEventListener("click", deleteEditingEntry);
 
 els.saveBudgetButton.addEventListener("click", () => {

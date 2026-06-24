@@ -114,7 +114,7 @@
         <article class="card about-card">
           <div><span>应用</span><b>轻账</b></div>
           <div><span>数据存储</span><b>仅保存在本机</b></div>
-          <div><span>版本</span><b>1.0 PWA</b></div>
+          <div><span>版本</span><b>1.1 PWA</b></div>
         </article>
       </section>
     </main>
@@ -126,6 +126,50 @@
     </nav>
   </div>
 
+  <dialog id="addMethodDialog" class="compact-dialog">
+    <div class="method-sheet">
+      <div class="sheet-header">
+        <button type="button" class="text-button" id="cancelMethodButton">取消</button>
+        <h2>记一笔</h2>
+        <span></span>
+      </div>
+      <button type="button" class="method-option featured" id="screenshotChoiceButton">
+        <span class="method-icon">⌗</span>
+        <span><b>截图自动识别</b><small>选择微信、支付宝或银行支付截图</small></span>
+        <strong>›</strong>
+      </button>
+      <button type="button" class="method-option" id="manualChoiceButton">
+        <span class="method-icon">✎</span>
+        <span><b>手动记账</b><small>自己输入金额、分类和备注</small></span>
+        <strong>›</strong>
+      </button>
+      <p class="privacy-note">🔒 截图仅在当前设备中识别，不会保存到账本。首次使用需联网下载中文识别模型。</p>
+      <input id="screenshotInput" type="file" accept="image/*" hidden>
+    </div>
+  </dialog>
+
+  <dialog id="ocrDialog" class="compact-dialog">
+    <div class="ocr-sheet">
+      <div class="sheet-header">
+        <button type="button" class="text-button" id="cancelOCRButton">取消</button>
+        <h2>正在识别</h2>
+        <span></span>
+      </div>
+      <div class="ocr-preview-wrap">
+        <img id="ocrPreview" alt="待识别截图">
+        <div class="scan-line"></div>
+      </div>
+      <div class="ocr-status">
+        <div class="ocr-status-top">
+          <b id="ocrStatusText">准备图片…</b>
+          <span id="ocrPercent">0%</span>
+        </div>
+        <div class="progress-track"><div class="progress-value" id="ocrProgress"></div></div>
+        <p id="ocrStatusHint">识别过程通常需要几秒，首次使用会稍久一些。</p>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="entryDialog">
     <form method="dialog" id="entryForm">
       <div class="sheet-header">
@@ -133,6 +177,22 @@
         <h2 id="entryDialogTitle">记一笔</h2>
         <button type="submit" class="text-button strong">保存</button>
       </div>
+
+      <section class="ocr-review" id="ocrReview" hidden>
+        <div class="ocr-review-title">
+          <span>✨</span>
+          <div><b>截图识别结果</b><small id="ocrSummary">请核对后保存</small></div>
+        </div>
+        <div id="ocrAmountSection">
+          <p>识别到的金额</p>
+          <div class="amount-candidates" id="ocrAmountCandidates"></div>
+        </div>
+        <p class="review-warning" id="ocrWarning" hidden></p>
+        <details>
+          <summary>查看识别文字</summary>
+          <pre id="ocrRawText"></pre>
+        </details>
+      </section>
 
       <div class="segmented large">
         <button type="button" class="active" data-entry-type="expense">支出</button>
@@ -159,6 +219,11 @@
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
+  <script
+    src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"
+    integrity="sha384-2BQ3U3OdKOb0Uczxqr41I9UvZkzr4V9Hv8uSzMMZAlmhsFClvdZX5wi5fDCzG+tM"
+    crossorigin="anonymous"></script>
+  <script src="ocr.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

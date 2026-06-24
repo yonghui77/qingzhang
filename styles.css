@@ -325,6 +325,107 @@ dialog::backdrop { background: rgba(10, 20, 38, .45); backdrop-filter: blur(3px)
 dialog[open] { animation: sheet-up .22s ease-out; }
 @keyframes sheet-up { from { transform: translateY(35px); opacity: .8; } }
 
+.compact-dialog {
+  height: auto;
+  max-height: min(86dvh, 760px);
+}
+
+.method-sheet, .ocr-sheet {
+  padding: 0 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.method-option {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 76px;
+  margin-top: 12px;
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  color: var(--text);
+  background: var(--card);
+  text-align: left;
+}
+
+.method-option.featured {
+  border-color: color-mix(in srgb, var(--blue) 32%, var(--line));
+  background: color-mix(in srgb, var(--blue) 7%, var(--card));
+}
+
+.method-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  color: var(--blue);
+  background: var(--blue-soft);
+  border-radius: 16px;
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.method-option b, .method-option small { display: block; }
+.method-option b { margin-bottom: 5px; font-size: 16px; }
+.method-option small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.method-option strong { color: var(--muted); font-size: 24px; font-weight: 400; }
+
+.privacy-note {
+  margin: 15px 6px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.ocr-preview-wrap {
+  position: relative;
+  height: min(48dvh, 430px);
+  margin: 12px 0 18px;
+  overflow: hidden;
+  background: #0e1118;
+  border-radius: 20px;
+}
+
+.ocr-preview-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.scan-line {
+  position: absolute;
+  right: 5%;
+  left: 5%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #54a5ff, transparent);
+  box-shadow: 0 0 12px #54a5ff;
+  animation: scan 2.1s ease-in-out infinite;
+}
+
+@keyframes scan {
+  0%, 100% { top: 10%; opacity: .25; }
+  50% { top: 88%; opacity: 1; }
+}
+
+.ocr-status {
+  padding: 16px;
+  background: var(--card);
+  border-radius: 19px;
+}
+
+.ocr-status-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.ocr-status-top span { color: var(--blue); font-weight: 700; }
+.ocr-status p { margin: 11px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
 #entryForm { height: 100%; padding: 0 16px calc(28px + env(safe-area-inset-bottom)); overflow-y: auto; }
 .sheet-header {
   position: sticky;
@@ -342,6 +443,77 @@ dialog[open] { animation: sheet-up .22s ease-out; }
 .sheet-header button:last-child { justify-self: end; }
 .text-button { padding: 8px 0; border: 0; color: var(--blue); background: transparent; }
 .text-button.strong { font-weight: 700; }
+
+.ocr-review {
+  margin: 14px 0 4px;
+  padding: 15px;
+  background: color-mix(in srgb, var(--blue) 8%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--line));
+  border-radius: 18px;
+}
+
+.ocr-review-title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.ocr-review-title > span { font-size: 22px; }
+.ocr-review-title b, .ocr-review-title small { display: block; }
+.ocr-review-title small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.ocr-review > div > p { margin: 14px 0 8px; color: var(--muted); font-size: 12px; }
+
+.amount-candidates {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 1px 5px;
+  scrollbar-width: none;
+}
+
+.amount-candidates::-webkit-scrollbar { display: none; }
+
+.amount-candidate {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--line));
+  border-radius: 99px;
+  color: var(--blue);
+  background: var(--card);
+  font-weight: 650;
+}
+
+.amount-candidate.selected {
+  color: white;
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.review-warning {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  color: #946100;
+  background: #fff4cd;
+  border-radius: 11px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ocr-review details { margin-top: 11px; color: var(--muted); font-size: 12px; }
+.ocr-review summary { cursor: pointer; }
+.ocr-review pre {
+  max-height: 150px;
+  margin: 9px 0 0;
+  padding: 10px;
+  overflow: auto;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border-radius: 10px;
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
 
 .amount-field {
   display: flex;
@@ -414,6 +586,11 @@ dialog[open] { animation: sheet-up .22s ease-out; }
     --muted: #989fad;
     --line: #2a2e38;
     --shadow: none;
+  }
+
+  .review-warning {
+    color: #ffd875;
+    background: #4a3810;
   }
 }
 
